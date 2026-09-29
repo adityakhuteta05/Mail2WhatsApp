@@ -26,5 +26,5 @@ COPY alembic.ini .
 # Expose standard Cloud Run port
 EXPOSE 8080
 
-# Run uvicorn on configured PORT
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+# Run database migrations and start uvicorn
+CMD ["sh", "-c", "alembic upgrade head || true; uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]

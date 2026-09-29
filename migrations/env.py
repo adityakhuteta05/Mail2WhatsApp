@@ -11,7 +11,6 @@ from alembic import context
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.config import settings
-from app.database import Base
 from app.database import Base, get_clean_database_url
 import app.models  # noqa: F401
 
@@ -45,7 +44,7 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = settings.DATABASE_URL
+    configuration["sqlalchemy.url"] = cleaned_db_url
 
     connectable = engine_from_config(
         configuration,
