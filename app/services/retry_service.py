@@ -35,6 +35,15 @@ class RetryService:
             status = exc.response.status_code
             if status in (429, 500, 502, 503, 504):
                 return True
+            # Meta WhatsApp Cloud API returns HTTP 400 for rate limit errors like 131056
+            try:
+                data = exc.response.json()
+                err_code = data.get("error", {}).get("code")
+                err_msg = str(data.get("error", {}).get("message", "")).lower()
+                if err_code in (131056, 131048, 130429) or "rate limit" in err_msg:
+                    return True
+            except Exception:
+                pass
             return False
 
         # Google API HTTP errors

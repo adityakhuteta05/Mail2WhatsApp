@@ -120,28 +120,33 @@ class SyncService:
         # --- Deduplication (FR-09) ---
         existing_email = db.query(Email).filter(Email.gmail_message_id == message_id).first()
         if existing_email:
-            logger.info(f"Duplicate detected: Gmail message {message_id} already exists with status {existing_email.status}. Skipping.")
-            return False
-
-        # Create record in DISCOVERED state
-        email_record = Email(
-            account_id=account.id,
-            gmail_message_id=message_id,
-            status="DISCOVERED",
-        )
-        db.add(email_record)
-        try:
+            if existing_email.status in ("SENT", "PARTIAL"):
+                logger.info(f"Duplicate detected: Gmail message {message_id} already exists with status {existing_email.status}. Skipping.")
+                return False
+            # Reuse existing record for retry
+            email_record = existing_email
+            email_record.status = "PROCESSING"
             db.commit()
-            db.refresh(email_record)
-        except Exception as e:
-            # In case of concurrent insert race condition
-            db.rollback()
-            logger.warning(f"Concurrent insert detected for {message_id}: {e}")
-            return False
+        else:
+            # Create record in DISCOVERED state
+            email_record = Email(
+                account_id=account.id,
+                gmail_message_id=message_id,
+                status="DISCOVERED",
+            )
+            db.add(email_record)
+            try:
+                db.commit()
+                db.refresh(email_record)
+            except Exception as e:
+                # In case of concurrent insert race condition
+                db.rollback()
+                logger.warning(f"Concurrent insert detected for {message_id}: {e}")
+                return False
 
-        # Transition to PROCESSING
-        email_record.status = "PROCESSING"
-        db.commit()
+            # Transition to PROCESSING
+            email_record.status = "PROCESSING"
+            db.commit()
 
         recipient_number = settings.WHATSAPP_RECIPIENT_NUMBER
         if not recipient_number:
@@ -309,6 +314,9 @@ class SyncService:
             if success:
                 retried_count += 1
 
+            # Pace retries to avoid triggering Meta rate limit 131056
+            await asyncio.sleep(1.5)
+
         return retried_count
 
     @classmethod
@@ -350,10 +358,12 @@ class SyncService:
             failed = 0
 
             for msg_id in recent_ids:
-                # Check if already recorded
+                # Check if already successfully recorded
                 exists = db.query(Email).filter(Email.gmail_message_id == msg_id).first()
-                if exists:
-                    continue  # already processed
+                if exists and exists.status in ("SENT", "PARTIAL"):
+                    continue  # already successfully sent
+                elif exists and exists.status == "FAILED":
+                    continue  # do not hammer failed unless explicit retry
 
                 success = await cls.process_single_message(
                     gmail_client=gmail_client,
@@ -366,6 +376,9 @@ class SyncService:
                     processed += 1
                 else:
                     failed += 1
+
+                # Rate limiting pacing for Meta WhatsApp API
+                await asyncio.sleep(1.2)
 
             sync_run.messages_processed = processed
             sync_run.messages_failed = failed

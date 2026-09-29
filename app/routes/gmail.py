@@ -77,3 +77,28 @@ def list_emails(
         query = query.filter(Email.status == status_filter.upper())
     emails = query.order_by(Email.id.desc()).offset(offset).limit(limit).all()
     return emails
+
+
+@router.post("/retry")
+def retry_failed_emails(
+    limit: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """
+    Resets failed emails back to RETRY_WAIT with an immediate retry window
+    so the background worker can re-attempt dispatching them.
+    """
+    from datetime import datetime
+    failed_emails = (
+        db.query(Email)
+        .filter(Email.status == "FAILED")
+        .order_by(Email.id.desc())
+        .limit(limit)
+        .all()
+    )
+    for email in failed_emails:
+        email.status = "RETRY_WAIT"
+        email.next_retry_at = datetime.utcnow()
+        email.retry_count = 0
+    db.commit()
+    return {"status": "ok", "queued_for_retry": len(failed_emails)}

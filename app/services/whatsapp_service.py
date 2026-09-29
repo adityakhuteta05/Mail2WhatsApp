@@ -113,6 +113,10 @@ class WhatsAppService:
                     "total_parts": len(chunks),
                 })
 
+                if idx < len(chunks):
+                    import asyncio
+                    await asyncio.sleep(1.0)
+
         return results
 
     async def upload_media(
