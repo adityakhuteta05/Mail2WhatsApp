@@ -3,16 +3,30 @@ from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from app.config import settings
 from app.utils.logging import logger
 
+def get_clean_database_url(raw_url: str) -> str:
+    """Normalizes database URLs (e.g. Render's postgres:// to postgresql+psycopg2://)."""
+    if not raw_url:
+        return "sqlite:///./mail2whatsapp.db"
+    url = raw_url.strip()
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif url.startswith("postgresql://") and not url.startswith("postgresql+"):
+        return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    return url
+
+
+db_url = get_clean_database_url(settings.DATABASE_URL)
+
 connect_args = {}
-if settings.DATABASE_URL.startswith("sqlite"):
+if db_url.startswith("sqlite"):
     connect_args["check_same_thread"] = False
     engine = create_engine(
-        settings.DATABASE_URL,
+        db_url,
         connect_args=connect_args,
     )
 else:
     engine = create_engine(
-        settings.DATABASE_URL,
+        db_url,
         pool_pre_ping=True,
         pool_recycle=300,
     )

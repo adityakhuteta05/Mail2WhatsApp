@@ -59,8 +59,9 @@ class WhatsAppService:
             logger.info(
                 f"[SIMULATION] WhatsApp message dispatch to {clean_number} ({len(chunks)} chunks). Length: {len(text)}"
             )
+            import uuid
             for idx, chunk in enumerate(chunks, 1):
-                mock_msg_id = f"wamid.SIMULATED_{idx}_{hash(chunk) & 0xffffffff}"
+                mock_msg_id = f"wamid.SIMULATED_{idx}_{uuid.uuid4().hex[:12]}"
                 results.append({
                     "whatsapp_message_id": mock_msg_id,
                     "status": "sent",
