@@ -1,0 +1,53 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mail2whatsapp-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - APP_ENV=production
+      - PORT=8080
+      - DATABASE_URL=postgresql+psycopg2://mail2wa_user:mail2wa_password@postgres:5432/mail2whatsapp
+      - SECRET_KEY=${SECRET_KEY:-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
+      - GMAIL_PUBSUB_TOPIC=${GMAIL_PUBSUB_TOPIC}
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
+      - PUBSUB_VERIFICATION_TOKEN=${PUBSUB_VERIFICATION_TOKEN}
+      - WHATSAPP_ACCESS_TOKEN=${WHATSAPP_ACCESS_TOKEN}
+      - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID}
+      - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN}
+      - WHATSAPP_RECIPIENT_NUMBER=${WHATSAPP_RECIPIENT_NUMBER}
+      - WHATSAPP_API_VERSION=${WHATSAPP_API_VERSION:-v21.0}
+      - RETAIN_EMAIL_BODIES=${RETAIN_EMAIL_BODIES:-true}
+      - MAX_ATTACHMENT_SIZE_MB=${MAX_ATTACHMENT_SIZE_MB:-25}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: mail2whatsapp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mail2wa_user
+      POSTGRES_PASSWORD: mail2wa_password
+      POSTGRES_DB: mail2whatsapp
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mail2wa_user -d mail2whatsapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
