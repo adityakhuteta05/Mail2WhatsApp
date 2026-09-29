@@ -1,4 +1,5 @@
 import base64
+import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from google.oauth2.credentials import Credentials
@@ -9,9 +10,16 @@ from app.config import settings
 from app.utils.logging import logger
 from app.utils.security import decrypt_token, encrypt_token
 
+# Allow HTTP redirect for local development
+if settings.APP_ENV != "production":
+    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+
 GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
 ]
+
+
+_PKCE_VERIFIERS: Dict[str, str] = {}
 
 
 class GmailService:
@@ -38,6 +46,8 @@ class GmailService:
             state=state,
         )
         flow.redirect_uri = settings.GOOGLE_REDIRECT_URI
+        # Confidential server clients use client_secret; disable PKCE autogen or store verifier
+        flow.autogenerate_code_verifier = False
         return flow
 
     @classmethod
@@ -52,13 +62,16 @@ class GmailService:
             include_granted_scopes="true",
             prompt="consent",
         )
+        if flow.code_verifier:
+            _PKCE_VERIFIERS[generated_state] = flow.code_verifier
         return authorization_url, generated_state
 
     @classmethod
     def exchange_code_for_credentials(cls, code: str, state: Optional[str] = None) -> Credentials:
         """Exchanges the OAuth 2.0 authorization code for user credentials."""
         flow = cls.get_oauth_flow(state=state)
-        flow.fetch_token(code=code)
+        verifier = _PKCE_VERIFIERS.pop(state, None) if state else None
+        flow.fetch_token(code=code, code_verifier=verifier)
         return flow.credentials
 
     @classmethod
